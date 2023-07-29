@@ -1,1 +1,6 @@
 Here we solve the Navier-Stokes equation for a simmetrical cavity flow. We make use of python language using jupyter notebooks.
+
+Bibliography:
+
+1- https://lorenabarba.com/blog/cfd-python-12-steps-to-navier-stokes/
+2- C.A.J. Computational Techniques for Fluid Dynamics, Volume 2.
