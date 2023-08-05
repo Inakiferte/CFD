@@ -1,0 +1,294 @@
+!=======================================
+! Module for type                      =
+!=======================================
+module m_types
+implicit none
+! Integer types
+
+integer, parameter :: int8   = selected_int_kind(8)
+
+! Real types
+
+integer, parameter :: single = selected_real_kind(6) 
+integer, parameter :: double = selected_real_kind(14)
+
+! Other more usefull names
+
+integer, parameter :: sp = single
+integer, parameter :: dp = double
+
+end module m_types
+
+!=======================================
+! Module containing physical constants =
+!=======================================
+module m_constants
+use m_types
+implicit none
+! Physical parameters
+
+real(kind=dp), parameter :: rho = 1.0_dp ! kg·m^-3
+real(kind=dp), parameter :: eta = 1.0_dp ! kg·m-1·s-1
+real(kind=dp), parameter :: nu  = 0.5_dp ! m^2·s^-1
+
+! Cavity and mesh parameters
+
+integer(kind=int8), parameter :: Mx = 41 ! Mesh quantity in x direction (avoid even values)
+integer(kind=int8), parameter :: My = 41 ! Mesh quantity in y direction (avoid even values)
+integer(kind=int8), parameter :: nx = (Mx - 1) / 2 ! Middle of the cavity in x direciton
+integer(kind=int8), parameter :: ny = (My - 1) / 2 ! Middle of the cavity in y direciton
+
+real(kind=dp), parameter :: Lx = 2.0_dp  ! Distance in x direction of the cavity in meters
+real(kind=dp), parameter :: Ly = 2.0_dp  ! Distance in x direction of the cavity in meters
+
+end module m_constants
+
+!=======================================
+! Main program                         =
+!=======================================
+PROGRAM cavityflow
+use m_types
+use m_constants
+
+! Mesh generation vectors
+
+real(kind=dp), allocatable :: x(:)
+real(kind=dp), allocatable :: y(:)
+
+! Mesh generation matrixes
+
+real(kind=dp), allocatable :: xx(:,:)
+real(kind=dp), allocatable :: yy(:,:)
+
+! Usefull integers
+
+integer(kind=int8) :: i,j
+
+! MESH GENERATION-----------------------
+
+! Generate x points with the same spacing
+allocate(x(Mx))
+    
+do i = 1, Mx
+ x(i) = (Lx / real(Mx - 1)) * real(i - 1)
+end do
+
+! Generate y points with the same spacing
+allocate(y(My))
+ 
+do j = 1, My
+ y(j) = (Ly / real(My - 1)) * real(j - 1)
+end do
+
+! Generate the mesh points
+allocate(xx(Mx, My), yy(Mx, My))
+do j = 1, My
+ do i = 1, Mx
+  xx(i, j) = x(i)
+  yy(i, j) = y(j)
+ end do
+end do
+
+
+!Write the mesh in a file (fort.1) for the posproduction with python
+do j = 1, My
+ do i = 1, Mx
+   if (i==1 .and. j==1) then
+     write(1, '(4F20.10)') xx(i, j), yy(i, j), real(Mx), real(My)
+   else
+   write(1, '(4F20.10)') xx(i, j), yy(i, j), 0.0, 0.0
+   end if
+ end do
+end do
+close(unit=1)
+!---------------------------------------
+
+END PROGRAM cavityflow
+
+!=======================================
+! Subroutine for the cavity            =
+!=======================================
+
+SUBROUTINE main_f(nt, u, v, deltat, deltax, deltay, p, rho, nu, mid_vel)
+use m_types
+use m_constants, only : nx, ny
+implicit none
+
+! Inputs
+integer(kind=int8), intent(in) :: nt, deltat, deltax, deltay, rho, nu
+
+! Inputs and outputs
+real(kind=dp), intent(inout) :: u(:,:)     ! Velocity matrix in x direction
+real(kind=dp), intent(inout) :: v(:,:)     ! Velocity matrix in y direction
+real(kind=dp), intent(inout) :: p(:,:)     ! Pressure
+real(kind=dp), intent(inout) :: mid_vel(:) ! Velocity and the middle of the
+                                           ! cavity
+
+! Backward step matrixes
+real(kind=dp) :: un(size(u,1), size(u,2))  ! Velocity matrix in x direction
+real(kind=dp) :: vn(size(v,1), size(v,2))  ! Velocity matrix in y direction
+real(kind=dp) :: s(size(u,1),size(u,2))    ! Supportive matrix declaration (for
+                                           ! supp function)
+
+! Usefull integers
+integer(kind=int8) :: n, i, j
+
+real(kind=dp) :: supp
+! Start the backward step matrixes
+un = u
+vn = v
+s = 0.0_dp
+
+! Start the solver loop-----------------
+DO n = 1, nt
+ write(2), "We are in step", n, "/", nt
+
+ un = u ! Refresh backward step x velocity matrix in each loop
+ vn = v ! Refresh backward step y velocity matrix in each loop
+ 
+ s = supp(s, rho, deltat, u, v, deltax, deltay) ! Refresh backward step s matrix in each loop
+ !p = pressure(p, deltax, deltay, s) ! Refresh backward step s matrix in each loop
+ 
+ ! Compute u with refreshed un, vn, s and p
+  do i = 2, size(v,1) - 1
+   do j = 2, size(v,2) - 1
+    u(i,j) = (un(i,j) -&
+    un(i,j) * deltat / deltax * (un(i,j) - un(i,j-1)) -&
+    vn(i,j) * deltat / deltay * (un(i,j) - un(i-1,j)) -&
+    deltat / (2.0 * rho * deltax) * (p(i,j+1) - p(i,j-1)) +&
+    nu * (deltat / deltax**2 * (un(i,j+1) - 2.0 * un(i,j) + un(i,j-1)) +&
+    deltat / deltay**2 * (un(i+1,j) - 2.0 * un(i,j) + un(i-1,j))))
+   end do
+  end do 
+
+ ! Compute v with refreshed un, vn, s and p
+ do i = 2, size(v,1) - 1
+  do j = 2, size(v,2) - 1
+   v(i,j) = (vn(i,j) -&
+             un(i,j) * deltat / deltax * (vn(i,j) - vn(i,j-1)) -&
+             vn(i,j) * deltat / deltay * (vn(i,j) - vn(i-1,j)) -&
+             deltat / (2.0 * rho * deltay) * (p(i+1,j) - p(i-1,j)) +&
+             nu * (deltat / deltax**2 * (vn(i,j+1) - 2.0 * vn(i,j) +vn(i,j-1))+&
+             deltat / deltay**2 * (vn(i+1,j) - 2.0 * vn(i,j) + vn(i-1,j))))
+  end do
+ end do
+ 
+ ! Compute the velocity at the middle of the cavity
+ mid_vel(n) = sqrt(u(nx, ny)**2 + v(nx, ny)**2)  ! Compute the velocity at the middle of the cavity
+
+ ! Set boundary conditions for u
+ do i = 1, size(u,1)
+  u(i,1) = 0.0_dp
+  u(i, size(u,2)) = 0.0_dp
+ end do
+ do j = 1, size(u,2)
+  u(1,j) = 0.0_dp
+  u(size(u,1),j) = 1.0_dp ! set velocity on cavity lid equal to 1
+ end do
+
+ ! Set boundary conditions for v
+ do i = 1, size(v,1)
+  v(i,1) = 0.0_dp
+  v(i, size(v,2)) = 0.0_dp
+ end do
+ do j = 1, size(v,2)
+  v(1,j) = 0.0_dp
+  v(size(v,1), j) = 0.0_dp
+ end do
+
+
+
+END DO
+!---------------------------------------
+close(unit=2)
+end subroutine main_f
+
+!=======================================
+! Function for the pressure            =
+!=======================================
+
+Function pressure(p, deltax, deltay, s) result(p_out)
+use m_types
+implicit none
+
+! Real inputs
+real(kind=dp), intent(in) :: deltax, deltay
+
+! Input matrixes
+real(kind=dp), intent(in) :: s(:,:)             ! Supportive matrix
+real(kind=dp), intent(in) :: p(:,:)             ! Pressure
+
+! Pressure matrixes
+real(kind=dp) :: p_out(size(p, 1), size(p, 2))  ! Output matrix
+real(kind=dp) :: pn(size(p, 1), size(p, 2))     !
+
+! Usefull integers
+integer(kind=int8) :: i, j, k
+integer(kind=int8), parameter :: nit = 50 ! Number of pseudo-time iterations for pressure
+                                          ! convergence
+
+p_out = p  ! Fill p_new matrix with the input pressure
+pn = p     ! Fill pn matrix with the input pressure
+
+DO k = 1, nit
+ pn = p_out
+ do i = 2, size(p_out,1) - 1
+  do j = 2, size(p_out,2) - 1
+   p_out(i,j) = (((pn(i,j+1) + pn(i,j-1)) * deltay**2 +&
+                  (pn(i+1,j) + pn(i-1,j)) * deltax**2) /&
+                  (2.0 * (deltax**2 + deltay**2)) -&
+                  deltax**2 * deltay**2 / (2.0 * (deltax**2 + deltay**2)) *&
+                  s(i,j))
+  end do
+ end do
+
+ do j = 1, size(p_out,2)
+  p_out(1,j) = p_out(2,j)  ! dp/dy = 0 at y = 0
+  p_out(size(p_out,1),j) = 0.0  ! p = 0 at y = 2
+ end do
+ 
+ do i = 1, size(p_out,1)
+  p_out(i,1) = p_out(i,2)  ! dp/dx = 0 at x = 0
+  p_out(i,size(p_out,2)) = p_out(i,size(p_out,2)-1)  ! dp/dx = 0 at x = 2
+ end do
+END DO
+end function pressure
+
+!=======================================
+! Function for a supportive matrix.    =
+! It will be helpful to introduce      =
+! a supportive function for the entire =
+! set of double terms                  =
+!=======================================
+Function supp (s, rho, deltat, u, v, deltax, deltay) result(s_new)
+use m_types 
+implicit none
+
+! Real inputs
+real(kind=dp), intent(in) :: rho, deltat, deltax, deltay
+
+! Input matrixes
+real(kind=dp), intent(in) :: s(:,:)     ! Backward step s function
+real(kind=dp), intent(in) :: u(:,:)     ! Backward step u velocity
+real(kind=dp), intent(in) :: v(:,:)     ! Backward step v velocity
+
+! Output s matrix
+real(kind=dp) :: s_new(size(s,1), size(s,2))
+
+! Usefull integers
+integer(kind=int8) :: i, j
+
+! Compute the new s (s_new) matrix
+do j = 2, size(s, 2) - 1
+ do i = 2, size(s, 1) - 1
+ s_new(i, j) = rho * (1.0_dp / deltat * ((u(i, j+1) - u(i, j-1)) / (2.0_dp * deltax) + (v(i+1, j) - v(i-1, j)) / (2.0_dp * deltay))&
+                - ((u(i, j+1) - u(i, j-1)) / (2.0_dp * deltax))**2&
+                - 2.0_dp * ((u(i+1, j) - u(i-1, j)) / (2.0_dp * deltay) * (v(i, j+1) - v(i, j-1)) / (2.0_dp * deltax))&
+                - ((v(i+1, j) - v(i-1, j)) / (2.0_dp * deltay))**2)
+ end do
+end do
+
+end function supp
+
+
+
