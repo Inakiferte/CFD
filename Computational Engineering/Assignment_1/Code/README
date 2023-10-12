@@ -1,0 +1,45 @@
+<^> INSTRUCTION FOR THE CODE <^>
+By: Iñaki Fernandez Tena
+Master In Space And Aeronautical Engineering
+Computational Engineering Assigment 1
+<^>==========================<^>
+
+
+In this directory there are 4 codes.
+1- For the static cylinder.
+2- For clockwise rotation cylinder.
+3- For anti-clockwise rotation cylinder.
+4- Non simetrical stream function around the cylinder (also clock and anticlock changing psi_body).
+
+The changes form 1 to 2 and 3 is just changing the psi_body value, adding +- 1.5. 
+Also there is a change in where the ouputs are stored.
+The results will be stored in:
+Results/Static
+Results/Clock
+Results/Anticlock
+
+So make sure these directories exist before compiling the code.
+The direcotories should be already created in the directory where you opened this README.
+More information about all the images of the report (such as paralel flow) can be found
+in the link provided at the bottom of the index of the report.
+
+#=======================================
+# How to compile
+#=======================================
+
+Make sure you have installed:
+python3 
+matplotlib
+numpy
+
+If not follow this instructions:
+sudo apt install python3
+sudo apt install python3-pip
+python -m pip install -U matplotlib
+pip install numpy
+
+How to compile:
+python3 code-name.py
+
+
+If there is any problem just write to: inakiphy@gmail.com
