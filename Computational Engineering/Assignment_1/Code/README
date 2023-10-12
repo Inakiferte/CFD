@@ -5,11 +5,12 @@ Computational Engineering Assigment 1
 <^>==========================<^>
 
 
-In this directory there are 4 codes.
+In this directory there are 5 codes.
 1- For the static cylinder.
 2- For clockwise rotation cylinder.
 3- For anti-clockwise rotation cylinder.
 4- Non simetrical stream function around the cylinder (also clock and anticlock changing psi_body).
+5- Analytical solutions jupyter notebook.
 
 The changes form 1 to 2 and 3 is just changing the psi_body value, adding +- 1.5. 
 Also there is a change in where the ouputs are stored.
